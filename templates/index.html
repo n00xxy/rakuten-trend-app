@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 楽天トレンドウォッチャー v3.1</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; max-width: 1200px; margin: auto; padding: 25px; background-color: #f8f9fa; color: #212529; }
+        .header, .trends-header { text-align: center; padding-bottom: 20px; margin-bottom: 30px; }
+        h1 { color: #d62828; margin: 0; font-size: 2.8em; font-weight: 800; }
+        h2 { color: #003049; font-size: 2.2em; border-bottom: 3px solid #003049; padding-bottom: 10px;}
+        .section-divider { border: 0; height: 2px; background-color: #dee2e6; margin: 60px 0; }
+        .card { background-color: #ffffff; padding: 25px; border-radius: 20px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08); margin-bottom: 30px; }
+        label { font-size: 1.1em; font-weight: 600; }
+        select, input, button { font-size: 1.05em; padding: 12px 18px; border-radius: 12px; border: 1px solid #ced4da; }
+        button { background-color: #d62828; color: white; border: none; cursor: pointer; transition: transform 0.2s ease, background-color 0.2s ease; }
+        button:hover { background-color: #b21e1e; transform: scale(1.05); }
+        .form-container { display: flex; justify-content: center; align-items: center; gap: 20px; }
+        table { width: 100%; border-collapse: collapse; border-radius: 20px; overflow: hidden; }
+        th, td { padding: 18px 20px; text-align: left; vertical-align: middle; border-bottom: 1px solid #dee2e6; }
+        tr:last-child td { border-bottom: none; }
+        th { background-color: #f8f9fa; font-weight: 600; }
+        .rank-cell, .review-cell { text-align: center; font-weight: 700; font-size: 1.25em; }
+        .rank-change span { font-size: 1.4em; font-weight: 700; color: #d62828; background-color: #f8d7da; padding: 4px 10px; border-radius: 8px; }
+        .item-name a { text-decoration: none; color: #023e8a; }
+        .item-name a:hover { text-decoration: underline; }
+        .reason-tag { display: inline-block; padding: 5px 12px; border-radius: 15px; font-size: 0.9em; font-weight: 600; color: #fff; text-align: center; }
+        .reason-both { background-color: #e63946; }
+        .reason-rank { background-color: #457b9d; }
+        .reason-review { background-color: #fca311; }
+    </style>
+</head>
+<body>
+
+    <div class="header"><h1>🚀 楽天トレンドウォッチャー</h1><p>{{ today }}</p></div>
+    <div class="card"><form class="form-container" method="get"><label for="genre">楽天ジャンルを選択:</label><select name="genre" id="genre">{% for name, id in genres.items() %}<option value="{{ name }}" {% if name == selected_genre %}selected{% endif %}>{{ name }}</option>{% endfor %}</select><button type="submit">購買トレンドを分析</button></form></div>
+    <div class="card"><strong>分析状況:</strong> {{ message }}</div>
+
+    {% if items %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 12%;">注目理由</th>
+                    <th style="width: 7%;">順位</th>
+                    <th style="width: 7%;">前回</th>
+                    <th style="width: 8%;">変動</th>
+                    <th>商品名</th>
+                    <th style="width: 10%;">レビュー増</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>
+                        {% if 'W増' in item.理由 %}
+                            <span class="reason-tag reason-both">{{ item.理由 }}</span>
+                        {% elif '順位' in item.理由 %}
+                            <span class="reason-tag reason-rank">{{ item.理由 }}</span>
+                        {% else %}
+                            <span class="reason-tag reason-review">{{ item.理由 }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="rank-cell">{{ item.順位_today | int }}位</td>
+                    <td class="rank-cell" style="color:#6c757d;">{% if item.順位_yesterday == '圏外' %}圏外{% else %}{{ item.順位_yesterday | int }}位{% endif %}</td>
+                    <td class="rank-change"><span>↑{{ item.順位変動 | int }}</span></td>
+                    <td class="item-name">
+                        <a href="{{ item.itemUrl_today }}" target="_blank" rel="noopener noreferrer">{{ item.商品名_today }}</a>
+                        <br><small style="color: #6c757d;">{{ item.店舗名_today }}</small>
+                    </td>
+                    <td class="rank-change"><span>+{{ item.レビュー増加数 | int }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>現在、表示できる注目商品はありません。</p>
+    {% endif %}
+
+    <hr class="section-divider"><div class="trends-header"><h2>🔍 Google 検索トレンド分析</h2></div><div class="card"><div id="trendsForm" class="form-container"><label for="keyword">キーワードを入力:</label><input type="text" id="keyword" placeholder="例: NISA, 電気自動車"><button type="submit">検索トレンドを分析</button></div></div><div class="card" style="display:none;" id="chartContainer"><canvas id="trendsChart"></canvas></div>
+    <script>const trendsForm=document.getElementById("trendsForm"),keywordInput=document.getElementById("keyword"),chartContainer=document.getElementById("chartContainer"),ctx=document.getElementById("trendsChart").getContext("2d");let myChart;trendsForm.addEventListener("submit",async e=>{e.preventDefault();const t=keywordInput.value.trim();if(!t)return void alert("キーワードを入力してください。");try{const e=await fetch(`/get_trends?keyword=${encodeURIComponent(t)}`),o=await e.json();if(o.error)return void alert(o.error);myChart&&myChart.destroy(),chartContainer.style.display="block",myChart=new Chart(ctx,{type:"line",data:o,options:{responsive:!0,plugins:{title:{display:!0,text:`「${t}」の過去90日間の検索トレンド`}},scales:{y:{beginAtZero:!0,suggestedMax:100}}}})}catch(e){console.error("Error fetching trends data:",e),alert("トレンドデータの取得に失敗しました。")}});</script>
+</body>
+</html>
